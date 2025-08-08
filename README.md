@@ -1,99 +1,171 @@
-# Projet : Déploiement d’un site statique AWS multi-régions avec domaine personnalisé
+# 🚀 Projet Cloud AWS — Hébergement Statique Multi-Région + Backend Serverless
 
-## 🚀 Objectif du projet
-
-Déployer un site statique sur Amazon Web Services, répliqué sur deux régions (us-east-1 et eu-west-1), avec distribution globale via CloudFront et sécurisé avec HTTPS (ACM). Le site est accessible via le domaine personnalisé **hkh24.xyz**.
-
----
-
-## 🔧 Services AWS utilisés
-
-* **Amazon S3** : stockage statique dans deux régions (us-east-1 et eu-west-1)
-* **Amazon CloudFront** : répartition et cache de contenu
-* **AWS Certificate Manager (ACM)** : certificat SSL pour HTTPS
-* **Amazon Route 53** : gestion DNS et enregistrement A (Alias)
-* **Terraform** : Infrastructure as Code pour l'automatisation du déploiement
+> *Projet démonstratif complet en infrastructure AWS avec Terraform modulaire.*  
+> Réalisé en août 2025 
 
 ---
 
-## 📂 Organisation des fichiers
+## 🎯 Objectif
 
-```
-projet4/
-│
-├── main.tf              # Configuration complète de l'infrastructure
-├── variables.tf         # Variables déclarées pour le projet
+Ce projet déploie une **infrastructure complète cloud sur AWS** avec **Terraform**, combinant :
+
+- 🌍 Un site statique **multi-région** via Amazon S3 (us-east-1 & eu-west-1)
+- 🌐 Un CDN **CloudFront** avec HTTPS (via certificat SSL ACM)
+- 🧾 Un domaine personnalisé : `https://hkh24.xyz`
+- 📨 Un **formulaire de contact** backend via Lambda + API Gateway
+- 🗃️ Une base NoSQL **DynamoDB** pour stocker les messages
+- 🔒 Une **VPC personnalisée** avec subnets publics/privés & NAT Gateway
+
+---
+
+## 🧰 Stack technique
+
+| Service AWS         | Rôle                                           |
+|---------------------|------------------------------------------------|
+| S3                  | Hébergement du site statique (x2 régions)      |
+| CloudFront          | CDN global avec HTTPS                          |
+| ACM + Route 53      | Certificat SSL + domaine custom                |
+| Lambda (Node.js)    | Fonction backend pour le formulaire de contact |
+| API Gateway         | Point d'entrée REST `/contact`                 |
+| DynamoDB            | Stockage des messages envoyés                  |
+| VPC/Subnets/NAT     | Isolation réseau et sortie sécurisée           |
+| Terraform Modules   | IaC modulaire pour chaque composant            |
+
+---
+
+## 🗂️ Structure du projet
+
+```bash
+projet/
+├── main.tf
+├── variables.tf
+├── outputs.tf
+├── terraform.tfvars
+├── versions.tf
+├── modules/
+│   ├── vpc/
+│   ├── lambda/
+│   ├── api_gateway/
+│   └── dynamodb/
 ├── site/
-│   ├── index.html       # Page principale du site
-│   └── error.html       # Page personnalisée d'erreur 403/404
-└── README.md            # Documentation du projet
+│   ├── index.html
+│   └── error.html
+├── lambda/
+│   ├── index.js
+│   └── lambda.zip
+└── docs/
+    └── architecture.png
 ```
 
 ---
 
-## 📚 Étapes de mise en place
+## 🧠 Lambda (Node.js)
 
-1. **Création des buckets S3**
+```js
+// lambda/index.js
+const AWS = require('aws-sdk');
+const { v4: uuidv4 } = require('uuid');
+const dynamodb = new AWS.DynamoDB.DocumentClient();
 
-   * `mon-site-multiregion-us` (us-east-1)
-   * `mon-site-multiregion-eu` (eu-west-1)
-   * Configuration des permissions et hosting statique
+exports.handler = async (event) => {
+  const body = JSON.parse(event.body);
+  const message = body.message;
 
-2. **Téléversement des fichiers HTML**
+  if (!message) return { statusCode: 400, body: 'Message is required' };
 
-   * `index.html` et `error.html` dans chaque bucket
+  await dynamodb.put({
+    TableName: process.env.TABLE_NAME,
+    Item: {
+      id: uuidv4(),
+      message,
+      timestamp: new Date().toISOString()
+    }
+  }).promise();
 
-3. **Certificat SSL (ACM)**
-
-   * Certificat demandé pour `hkh24.xyz` et `*.hkh24.xyz`
-   * Validation DNS via Route 53
-
-4. **CloudFront**
-
-   * Distribution configurée avec Origin Access Identity (OAI)
-   * Alias : `hkh24.xyz`
-   * Certificat ACM région us-east-1 attaché
-
-5. **Route 53**
-
-   * Enregistrement A (Alias) pointant vers la distribution CloudFront
-
----
-
-## ❌ Difficultés rencontrées
-
-### 1. **Erreur SSL / Certificat invalide**
-
-* **Problème** : Terraform retournait une erreur 400 `InvalidViewerCertificate`
-* **Solution** : S'assurer que le certificat ACM était bien dans la région `us-east-1` et validé pour les bons domaines (incluant le wildcard)
-
-### 2. **CloudFront non visible dans Route 53**
-
-* **Problème** : Aucun endpoint CloudFront ne s’affichait lors de la création d’un enregistrement
-* **Solution** : Bien activer l'option "Alias" et choisir "A – Routes traffic to AWS resource", puis CloudFront
-
-### 3. **403 Forbidden sur S3/CloudFront**
-
-* **Problème** : Accès refusé depuis CloudFront vers le contenu S3
-* **Solution** : Ajouter une policy de bucket autorisant l'OAI à lire le contenu (`s3:GetObject`)
-
-### 4. **DNS\_PROBE\_POSSIBLE / Domaine inaccessible**
-
-* **Problème** : `hkh24.xyz` ne résolvait pas
-* **Solution** : S'assurer que Route 53 gère bien la zone DNS du domaine, et que l’enregistrement A est correctement créé
+  return {
+    statusCode: 200,
+    body: JSON.stringify({ success: true })
+  };
+};
+```
 
 ---
 
-## 🔍 Vérifications finales
+## 🔧 Déploiement
 
-* [x] [https://d1qffmd3yo1sxj.cloudfront.net](https://d1qffmd3yo1sxj.cloudfront.net) fonctionne
-* [x] [https://hkh24.xyz](https://hkh24.xyz) fonctionne avec HTTPS
-* [x] Aucun accès direct S3 autorisé (403 attendu)
+### 📋 Prérequis
+- ✅ AWS CLI configuré (`aws configure`)
+- ✅ Un domaine Route 53 actif (ex : `hkh24.xyz`)
+- ✅ Terraform ≥ 1.4 installé
+- ✅ SMTP configuré (`email_sender`, `email_password`, `email_receiver`)
+
+### 🚀 Commandes de déploiement
+
+```bash
+terraform init      # Initialiser Terraform
+terraform plan      # Vérifier le plan
+terraform apply     # Lancer l'infra
+```
 
 ---
 
-## ✍️ Auteur
+## 🌐 URLs générées
 
-**NGAMUNA EYAY**
-Projet réalisé dans le cadre d’une démonstration AWS Cloud & Terraform
-Août 2025
+| Composant              | URL |
+|------------------------|-----|
+| Site S3 (US)           | http://mon-site-multiregion-us.s3-website-us-east-1.amazonaws.com |
+| Site S3 (EU)           | http://mon-site-multiregion-eu.s3-website-eu-west-1.amazonaws.com |
+| CDN CloudFront         | https://hkh24.xyz |
+| API REST (Lambda POST) | `https://<api_id>.execute-api.us-east-1.amazonaws.com/prod/contact` |
+
+---
+
+## 🛠️ Troubleshooting (Erreurs & Résolutions)
+
+| Problème rencontré | Solution appliquée |
+|--------------------|---------------------|
+| `lambda.zip not found` | Vérifier le chemin exact et le passer correctement à `lambda_zip_path` |
+| `ResourceConflictException` (Lambda / IAM / S3) | Nettoyer les ressources existantes (`terraform destroy`) ou renommer |
+| `CNAMEAlreadyExists (CloudFront)` | Un domaine est déjà associé. Utiliser un autre nom ou supprimer l'ancien |
+| `Lambda ImportModuleError` | Vérifier que `lambda.zip` contient bien `index.js` à la racine, avec les bonnes dépendances (npm install si besoin) |
+
+---
+
+## 📚 Leçons apprises
+
+- Mise en œuvre complète de Terraform modulaire
+- Déploiement multi-région (S3)
+- Configuration d’un CDN HTTPS (CloudFront + ACM)
+- Création d’un backend serverless (Lambda, API Gateway)
+- Gestion de réseau cloud avec VPC, subnets, NAT Gateway
+- Débogage avancé sur AWS (CloudWatch, permissions, logs...)
+
+---
+
+## 🌱 Améliorations possibles
+
+- Ajouter une interface d’admin pour voir les messages envoyés (via Cognito ?)
+- Exporter les messages DynamoDB dans S3 (Lambda trigger ?)
+- Ajouter tests automatisés (Terraform + fonction Lambda)
+- Passer les secrets (SMTP) par AWS Secrets Manager
+
+---
+
+## 🧠 Architecture du projet
+
+📷 *Diagramme d’architecture disponible dans `/docs/architecture.png`*  
+*(inclure l’image dans le README GitHub si besoin avec `![diagramme](./docs/architecture.png)`).*
+
+---
+
+## 👨‍💻 Auteur
+
+> **Ngamuna Eyay**  
+> Ingénieur Cloud & DevOps  
+> 📆 Août 2025  
+> 📫 ngamunaeyay2@gmail.com  
+
+---
+
+**Merci pour votre lecture 🙌**  
+*Projet disponible sur GitHub — N’hésitez pas à étoiler ou commenter !*

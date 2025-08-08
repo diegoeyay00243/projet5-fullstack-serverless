@@ -8,9 +8,44 @@ provider "aws" {
   region = "eu-west-1"
 }
 
+###############################
+# Modules : VPC, Lambda, API Gateway, DynamoDB
+###############################
+
+module "vpc" {
+  source              = "./modules/vpc"
+  vpc_cidr_block      = var.vpc_cidr_block
+  public_subnet_cidr  = var.public_subnet_cidr
+  private_subnet_cidr = var.private_subnet_cidr
+}
+
+module "lambda" {
+  source                = "./modules/lambda"
+  lambda_function_name  = "contact_handler"
+  lambda_handler        = "index.handler"
+  lambda_runtime        = "nodejs18.x"
+  lambda_zip_path       = "modules/lambda/lambda.zip"  
+  dynamodb_table_name   = var.dynamodb_table_name
+  email_sender          = "ngamunaeyay2@gmail.com"
+  email_password        = "mot_de_passe_app"
+  email_receiver        = "ngamunaeyay2@gmail.com"
+}
+
+module "api" {
+  source            = "./modules/api_gateway"
+  api_name          = var.api_name
+  lambda_invoke_arn = module.lambda.invoke_arn
+}
+
+module "dynamodb" {
+  source              = "./modules/dynamodb"
+  dynamodb_table_name = var.dynamodb_table_name
+}
+
 ##############################
 # Infos sur le compte AWS
 ##############################
+
 data "aws_caller_identity" "current" {}
 
 ##############################
@@ -29,19 +64,23 @@ resource "aws_s3_bucket" "site_eu" {
   force_destroy = true
 }
 
-##############################
-# Bucket S3 pour les logs CloudFront
-##############################
-
 resource "aws_s3_bucket" "logs" {
-  provider      = aws.us_east
-  bucket        = "mon-site-logs-bucket"
-  force_destroy = true
+  bucket = "mon-site-logs-bucket"
+  tags = {
+    Name = "Logs Bucket"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "logs_block" {
+  bucket                  = aws_s3_bucket.logs.id
+  block_public_acls       = false      # ✅ CloudFront doit pouvoir écrire
+  block_public_policy     = true
+  ignore_public_acls      = false      # ✅ Important aussi
+  restrict_public_buckets = true
 }
 
 resource "aws_s3_bucket_ownership_controls" "logs_ownership" {
   bucket = aws_s3_bucket.logs.id
-
   rule {
     object_ownership = "ObjectWriter"
   }
@@ -83,16 +122,12 @@ resource "aws_s3_bucket_website_configuration" "website_eu" {
   }
 }
 
-##############################
-# Upload des fichiers dans S3
-##############################
-
 resource "aws_s3_bucket_object" "index_us" {
   provider     = aws.us_east
   bucket       = aws_s3_bucket.site_us.id
   key          = "index.html"
   source       = "${path.module}/site/index.html"
-  content_type = "text/html"
+  content_type = "text/html; charset=utf-8"
 }
 
 resource "aws_s3_bucket_object" "error_us" {
@@ -100,7 +135,7 @@ resource "aws_s3_bucket_object" "error_us" {
   bucket       = aws_s3_bucket.site_us.id
   key          = "error.html"
   source       = "${path.module}/site/error.html"
-  content_type = "text/html"
+  content_type = "text/html; charset=utf-8"
 }
 
 resource "aws_s3_bucket_object" "index_eu" {
@@ -108,7 +143,7 @@ resource "aws_s3_bucket_object" "index_eu" {
   bucket       = aws_s3_bucket.site_eu.id
   key          = "index.html"
   source       = "${path.module}/site/index.html"
-  content_type = "text/html"
+  content_type = "text/html; charset=utf-8"
 }
 
 resource "aws_s3_bucket_object" "error_eu" {
@@ -116,46 +151,87 @@ resource "aws_s3_bucket_object" "error_eu" {
   bucket       = aws_s3_bucket.site_eu.id
   key          = "error.html"
   source       = "${path.module}/site/error.html"
-  content_type = "text/html"
+  content_type = "text/html; charset=utf-8"
 }
 
-##############################
-# CloudFront OAI (Origin Access Identity)
-##############################
 
-resource "aws_cloudfront_origin_access_identity" "oai" {
-  comment = "OAI for CloudFront to access S3 bucket"
+resource "aws_s3_bucket_policy" "site_us_policy" {
+  bucket = aws_s3_bucket.site_us.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Sid       = "PublicReadGetObject",
+        Effect    = "Allow",
+        Principal = "*",
+        Action    = "s3:GetObject",
+        Resource  = "${aws_s3_bucket.site_us.arn}/*"
+      },
+      {
+        Sid       = "CloudFrontAccess",
+        Effect    = "Allow",
+        Principal = {
+          AWS = aws_cloudfront_origin_access_identity.oai.iam_arn
+        },
+        Action    = "s3:GetObject",
+        Resource  = "${aws_s3_bucket.site_us.arn}/*"
+      }
+    ]
+  })
+
+  depends_on = [aws_s3_bucket_public_access_block.site_us_block]
 }
 
-##############################
-# S3 Policy pour autoriser OAI à lire le bucket S3
-##############################
 
-resource "aws_s3_bucket_policy" "cf_s3_policy" {
-  provider = aws.us_east
-  bucket   = aws_s3_bucket.site_us.id
+resource "aws_s3_bucket_policy" "site_eu_policy" {
+  provider = aws.eu_west
+  bucket = aws_s3_bucket.site_eu.id
 
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
       {
         Effect = "Allow",
-        Principal = {
-          AWS = aws_cloudfront_origin_access_identity.oai.iam_arn
-        },
+        Principal = "*",
         Action   = "s3:GetObject",
-        Resource = "${aws_s3_bucket.site_us.arn}/*"
+        Resource = "${aws_s3_bucket.site_eu.arn}/*"
       }
     ]
   })
+
+  depends_on = [aws_s3_bucket_public_access_block.site_eu_block]
+}
+
+resource "aws_s3_bucket_public_access_block" "site_us_block" {
+  provider                = aws.us_east
+  bucket                  = aws_s3_bucket.site_us.id
+  block_public_acls       = false
+  ignore_public_acls      = false
+  block_public_policy     = false
+  restrict_public_buckets = false
+}
+
+resource "aws_s3_bucket_public_access_block" "site_eu_block" {
+  provider                = aws.eu_west
+  bucket                  = aws_s3_bucket.site_eu.id
+  block_public_acls       = false
+  ignore_public_acls      = false
+  block_public_policy     = false
+  restrict_public_buckets = false
 }
 
 ##############################
-# CloudFront avec SSL et hkh24.xyz
+# CloudFront
 ##############################
 
+resource "aws_cloudfront_origin_access_identity" "oai" {
+  comment = "OAI for CloudFront to access S3 bucket"
+}
+
+
 resource "aws_cloudfront_distribution" "cdn" {
-  aliases = ["hkh24.xyz"] # domaine personnalisé
+  # aliases = ["hkh24.xyz"]
 
   origin {
     domain_name = aws_s3_bucket.site_us.bucket_regional_domain_name
@@ -193,26 +269,22 @@ resource "aws_cloudfront_distribution" "cdn" {
   }
 
   viewer_certificate {
-  acm_certificate_arn = "arn:aws:acm:us-east-1:728182301123:certificate/a4672fda-ac9b-4ac2-a726-26317cfe7c49"
-  ssl_support_method = "sni-only"
-  minimum_protocol_version = "TLSv1.2_2021"
-}
-
+    acm_certificate_arn      = "arn:aws:acm:us-east-1:728182301123:certificate/a4672fda-ac9b-4ac2-a726-26317cfe7c49"
+    ssl_support_method       = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2021"
+  }
 
   logging_config {
-    bucket          = aws_s3_bucket.logs.bucket_regional_domain_name
-    include_cookies = false
-    prefix          = "cf-logs/"
+  bucket          = "${aws_s3_bucket.logs.bucket}.s3.amazonaws.com"
+  include_cookies = false
+  prefix          = "cf-logs/"
   }
+
 
   tags = {
     Name = "StaticSiteDistribution"
   }
 }
-
-##############################
-# Policy pour autoriser CloudFront à écrire les logs dans le bucket
-##############################
 
 resource "aws_s3_bucket_policy" "logs_policy" {
   bucket = aws_s3_bucket.logs.id
@@ -246,3 +318,18 @@ resource "aws_s3_bucket_policy" "logs_policy" {
     ]
   })
 }
+
+##############################
+# lambda
+##############################
+
+# Vérifie que Lambda autorise bien API Gateway à l’invoquer
+
+resource "aws_lambda_permission" "allow_api_gateway" {
+  statement_id  = "AllowAPIGatewayInvoke-${module.api.contact_api_id}"
+  action        = "lambda:InvokeFunction"
+  function_name = module.lambda.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${module.api.execution_arn}/*/*"
+}
+

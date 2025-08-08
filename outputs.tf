@@ -1,4 +1,7 @@
-# URL S3 directes (comme dans Projet 3)
+########################################
+# 🌍 S3 Static Website (multi-région)
+########################################
+
 output "site_us_url" {
   description = "URL du site hébergé en us-east-1 (via S3)"
   value       = "http://${aws_s3_bucket.site_us.bucket}.s3-website-us-east-1.amazonaws.com"
@@ -9,20 +12,64 @@ output "site_eu_url" {
   value       = "http://${aws_s3_bucket.site_eu.bucket}.s3-website-eu-west-1.amazonaws.com"
 }
 
-# URL de la distribution CloudFront
+########################################
+# 🌐 CloudFront
+########################################
+
 output "cloudfront_url" {
-  description = "URL de la distribution CloudFront (HTTPS)"
+  description = "URL publique CloudFront (HTTPS)"
   value       = "https://${aws_cloudfront_distribution.cdn.domain_name}"
 }
 
-# (Optionnel) Domaine personnalisé si hkh24.xyz est relié via Route 53
-# Décommente quand ton domaine est bien connecté à CloudFront
- output "custom_domain" {
-   description = "URL du site via le domaine personnalisé"
-   value       = "https://hkh24.xyz"
- }
+output "custom_domain" {
+  description = "URL via domaine personnalisé (ex: hkh24.xyz)"
+  value       = "https://hkh24.xyz"
+}
 
-# (Optionnel) Pour debug du certificat (si tu avais laissé le cert ACM dans le code)
-# output "cert_validation_records" {
-#   value = aws_acm_certificate.cert.domain_validation_options
-# }
+########################################
+# 🧠 Lambda
+########################################
+
+output "lambda_function_name" {
+  description = "Nom de la fonction lambda"
+  value = module.lambda.function_name
+}
+
+
+########################################
+# 🌐 API Gateway
+########################################
+
+output "api_gateway_url" {
+  description = "URL publique de l’API REST pour le formulaire contact"
+  value       = "https://${module.api.contact_api_id}.execute-api.us-east-1.amazonaws.com/prod/contact"
+}
+
+
+########################################
+# 🗃️ DynamoDB
+########################################
+
+output "dynamodb_table_name" {
+  description = "Nom de la table DynamoDB"
+  value       = module.dynamodb.dynamodb_table_name
+}
+
+########################################
+# ☁️ Réseau VPC
+########################################
+
+output "vpc_id" {
+  description = "ID du VPC"
+  value       = module.vpc.vpc_id
+}
+
+output "public_subnet_id" {
+  description = "ID du subnet public"
+  value       = module.vpc.public_subnet_id
+}
+
+output "private_subnet_id" {
+  description = "ID du subnet privé"
+  value       = module.vpc.private_subnet_id
+}
