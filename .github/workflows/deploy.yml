@@ -1,0 +1,70 @@
+name: Terraform CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - '**/*.tf'
+      - '**/*.tfvars'
+      - 'modules/**'
+      - '.github/workflows/deploy.yml'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - '**/*.tf'
+      - '**/*.tfvars'
+      - 'modules/**'
+
+permissions:
+  id-token: write   # OIDC vers AWS
+  contents: read
+
+jobs:
+  terraform:
+    name: Plan & (si main) Apply
+    runs-on: ubuntu-latest
+    concurrency:
+      group: terraform-projet5
+      cancel-in-progress: false
+
+    env:
+      AWS_REGION: us-east-1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::728182301123:role/GitHubActionsOIDCFullstackTerraform
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform fmt
+        run: terraform fmt -check
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform plan
+        id: plan
+        run: terraform plan -input=false -no-color -out=tfplan
+
+      - name: Upload plan artifact (PR only)
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: tfplan
+
+      - name: Terraform apply
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: terraform apply -input=false -auto-approve tfplan
