@@ -1,28 +1,29 @@
-name: "ci: Terraform CI/CD via OIDC (plan PR / apply main)"
+name: ci: Terraform CI/CD via OIDC (plan PR / apply main)
 
 on:
   push:
+    branches: [ main ]
     paths:
-      - '**.tf'
-      - '.github/workflows/deploy.yml'
-      - 'modules/**'
-      - 'site/**'
+      - ".github/workflows/deploy.yml"
+      - "**/*.tf"
+      - "modules/**"
+      - "site/**"
   pull_request:
+    branches: [ main ]
     paths:
-      - '**.tf'
-      - '.github/workflows/deploy.yml'
-      - 'modules/**'
-      - 'site/**'
+      - "**/*.tf"
+      - "modules/**"
 
 permissions:
-  id-token: write
-  contents: read
+  id-token: write   # OIDC
+  contents: read    # checkout
 
 jobs:
   terraform:
     runs-on: ubuntu-latest
     env:
       AWS_REGION: us-east-1
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,18 +34,13 @@ jobs:
           role-to-assume: arn:aws:iam::728182301123:role/GitHubActionsOIDCFullstackTerraform
           aws-region: ${{ env.AWS_REGION }}
 
-      # 👉 preuve que l’assume-role marche
-      - name: Who am I in AWS?
-        run: aws sts get-caller-identity
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_wrapper: false
 
-      # 👉 ne bloque plus le run si des diffs de formatage existent
-      - name: Terraform fmt (non blocking)
-        run: terraform fmt -check -recursive || echo "::warning ::fmt found differences (ignored)"
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive || true
 
       - name: Terraform init
         run: terraform init -input=false
@@ -53,9 +49,9 @@ jobs:
         run: terraform validate
 
       - name: Terraform plan
-        if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main'
-        run: terraform plan -input=false -no-color
+        run: terraform plan -no-color -input=false -out=tfplan
 
-      - name: Terraform apply (main only)
+      # Apply uniquement sur main (pas sur PR)
+      - name: Terraform apply
         if: github.ref == 'refs/heads/main'
-        run: terraform apply -auto-approve -input=false -no-color
+        run: terraform apply -auto-approve -input=false tfplan
