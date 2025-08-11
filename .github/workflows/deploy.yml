@@ -1,22 +1,17 @@
-name: ci: Terraform CI/CD via OIDC (plan PR / apply main)
+name: Terraform CI/CD (plan for PRs, apply for main)
 
 on:
   push:
-    branches: [ main ]
-    paths:
-      - ".github/workflows/deploy.yml"
-      - "**/*.tf"
-      - "modules/**"
-      - "site/**"
+    branches:
+      - main
   pull_request:
-    branches: [ main ]
-    paths:
-      - "**/*.tf"
-      - "modules/**"
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
 
 permissions:
-  id-token: write   # OIDC
-  contents: read    # checkout
+  id-token: write  # OIDC
+  contents: read   # Checkout
 
 jobs:
   terraform:
@@ -31,7 +26,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::728182301123:role/GitHubActionsOIDCFullstackTerraform.
+          role-to-assume: arn:aws:iam::728182301123:role/GitHubActionsOIDCFullstackTerraform
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Setup Terraform
@@ -40,18 +35,22 @@ jobs:
           terraform_wrapper: false
 
       - name: Terraform fmt
-        run: terraform fmt -check -recursive || true
+        id: fmt
+        run: terraform fmt -check
+        continue-on-error: true
 
-      - name: Terraform init
+      - name: Terraform Init
+        id: init
         run: terraform init -input=false
 
-      - name: Terraform validate
+      - name: Terraform Validate
+        id: validate
         run: terraform validate
 
-      - name: Terraform plan
-        run: terraform plan -no-color -input=false -out=tfplan
+      - name: Terraform Plan (on Pull Request)
+        if: github.event_name == 'pull_request'
+        run: terraform plan -no-color
 
-      # Apply uniquement sur main (pas sur PR)
-      - name: Terraform apply
+      - name: Terraform Apply (on main branch)
         if: github.ref == 'refs/heads/main'
-        run: terraform apply -auto-approve -input=false tfplan
+        run: terraform apply -auto-approve -input=false
