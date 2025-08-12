@@ -20,15 +20,15 @@ module "vpc" {
 }
 
 module "lambda" {
-  source                = "./modules/lambda"
-  lambda_function_name  = "contact_handler"
-  lambda_handler        = "index.handler"
-  lambda_runtime        = "nodejs18.x"
-  lambda_zip_path       = "modules/lambda/lambda.zip"  
-  dynamodb_table_name   = var.dynamodb_table_name
-  email_sender          = "ngamunaeyay2@gmail.com"
-  email_password        = "mot_de_passe_app"
-  email_receiver        = "ngamunaeyay2@gmail.com"
+  source               = "./modules/lambda"
+  lambda_function_name = "contact_handler"
+  lambda_handler       = "index.handler"
+  lambda_runtime       = "nodejs18.x"
+  lambda_zip_path      = "modules/lambda/lambda.zip"
+  dynamodb_table_name  = var.dynamodb_table_name
+  email_sender         = "ngamunaeyay2@gmail.com"
+  email_password       = "mot_de_passe_app"
+  email_receiver       = "ngamunaeyay2@gmail.com"
 }
 
 module "api" {
@@ -73,9 +73,9 @@ resource "aws_s3_bucket" "logs" {
 
 resource "aws_s3_bucket_public_access_block" "logs_block" {
   bucket                  = aws_s3_bucket.logs.id
-  block_public_acls       = false      # ✅ CloudFront doit pouvoir écrire
+  block_public_acls       = false # ✅ CloudFront doit pouvoir écrire
   block_public_policy     = true
-  ignore_public_acls      = false      # ✅ Important aussi
+  ignore_public_acls      = false # ✅ Important aussi
   restrict_public_buckets = true
 }
 
@@ -169,13 +169,13 @@ resource "aws_s3_bucket_policy" "site_us_policy" {
         Resource  = "${aws_s3_bucket.site_us.arn}/*"
       },
       {
-        Sid       = "CloudFrontAccess",
-        Effect    = "Allow",
+        Sid    = "CloudFrontAccess",
+        Effect = "Allow",
         Principal = {
           AWS = aws_cloudfront_origin_access_identity.oai.iam_arn
         },
-        Action    = "s3:GetObject",
-        Resource  = "${aws_s3_bucket.site_us.arn}/*"
+        Action   = "s3:GetObject",
+        Resource = "${aws_s3_bucket.site_us.arn}/*"
       }
     ]
   })
@@ -186,16 +186,16 @@ resource "aws_s3_bucket_policy" "site_us_policy" {
 
 resource "aws_s3_bucket_policy" "site_eu_policy" {
   provider = aws.eu_west
-  bucket = aws_s3_bucket.site_eu.id
+  bucket   = aws_s3_bucket.site_eu.id
 
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
       {
-        Effect = "Allow",
+        Effect    = "Allow",
         Principal = "*",
-        Action   = "s3:GetObject",
-        Resource = "${aws_s3_bucket.site_eu.arn}/*"
+        Action    = "s3:GetObject",
+        Resource  = "${aws_s3_bucket.site_eu.arn}/*"
       }
     ]
   })
@@ -275,9 +275,9 @@ resource "aws_cloudfront_distribution" "cdn" {
   }
 
   logging_config {
-  bucket          = "${aws_s3_bucket.logs.bucket}.s3.amazonaws.com"
-  include_cookies = false
-  prefix          = "cf-logs/"
+    bucket          = "${aws_s3_bucket.logs.bucket}.s3.amazonaws.com"
+    include_cookies = false
+    prefix          = "cf-logs/"
   }
 
 
@@ -293,13 +293,13 @@ resource "aws_s3_bucket_policy" "logs_policy" {
     Version = "2012-10-17",
     Statement = [
       {
-        Sid       = "AllowPutLogs",
-        Effect    = "Allow",
+        Sid    = "AllowPutLogs",
+        Effect = "Allow",
         Principal = {
           Service = "cloudfront.amazonaws.com"
         },
-        Action    = "s3:PutObject",
-        Resource  = "${aws_s3_bucket.logs.arn}/cf-logs/*",
+        Action   = "s3:PutObject",
+        Resource = "${aws_s3_bucket.logs.arn}/cf-logs/*",
         Condition = {
           StringEquals = {
             "AWS:SourceAccount" = data.aws_caller_identity.current.account_id
@@ -307,13 +307,13 @@ resource "aws_s3_bucket_policy" "logs_policy" {
         }
       },
       {
-        Sid       = "AllowGetBucketAcl",
-        Effect    = "Allow",
+        Sid    = "AllowGetBucketAcl",
+        Effect = "Allow",
         Principal = {
           Service = "cloudfront.amazonaws.com"
         },
-        Action    = "s3:GetBucketAcl",
-        Resource  = "${aws_s3_bucket.logs.arn}"
+        Action   = "s3:GetBucketAcl",
+        Resource = "${aws_s3_bucket.logs.arn}"
       }
     ]
   })

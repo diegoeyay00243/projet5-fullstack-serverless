@@ -11,7 +11,7 @@ terraform {
 
 terraform {
   backend "s3" {
-    bucket         = "tfstate-projet5-prod"   # Mon bucket CI/CD
+    bucket         = "tfstate-projet5-prod" # Mon bucket CI/CD
     key            = "infra/terraform.tfstate"
     region         = "us-east-1"
     dynamodb_table = "tfstate-locks"

@@ -10,10 +10,10 @@ resource "aws_lambda_function" "contact" {
 
   environment {
     variables = {
-      EMAIL_SENDER    = var.email_sender
-      EMAIL_PASSWORD  = var.email_password
-      EMAIL_RECEIVER  = var.email_receiver
-      DYNAMODB_TABLE  = var.dynamodb_table_name
+      EMAIL_SENDER   = var.email_sender
+      EMAIL_PASSWORD = var.email_password
+      EMAIL_RECEIVER = var.email_receiver
+      DYNAMODB_TABLE = var.dynamodb_table_name
     }
   }
 }

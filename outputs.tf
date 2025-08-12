@@ -32,7 +32,7 @@ output "custom_domain" {
 
 output "lambda_function_name" {
   description = "Nom de la fonction lambda"
-  value = module.lambda.function_name
+  value       = module.lambda.function_name
 }
 
 
