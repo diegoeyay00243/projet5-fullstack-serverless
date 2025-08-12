@@ -2,16 +2,14 @@ name: Terraform CI/CD (plan for PRs, apply for main)
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
   pull_request:
-    branches:
-      - main
-    types: [opened, synchronize, reopened]
+    branches: [ "main" ]
+  workflow_dispatch:
 
 permissions:
-  id-token: write  # OIDC
-  contents: read   # Checkout
+  id-token: write
+  contents: read
 
 jobs:
   terraform:
@@ -26,8 +24,11 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::728182301123:role/GitHubActionsOIDCFullstackTerraform
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Who am I?
+        run: aws sts get-caller-identity
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -35,22 +36,19 @@ jobs:
           terraform_wrapper: false
 
       - name: Terraform fmt
-        id: fmt
         run: terraform fmt -check
         continue-on-error: true
 
-      - name: Terraform Init
-        id: init
+      - name: Terraform init
         run: terraform init -input=false
 
-      - name: Terraform Validate
-        id: validate
+      - name: Terraform validate
         run: terraform validate
 
-      - name: Terraform Plan (on Pull Request)
+      - name: Terraform plan (PR)
         if: github.event_name == 'pull_request'
         run: terraform plan -no-color
 
-      - name: Terraform Apply (on main branch)
+      - name: Terraform apply (main)
         if: github.ref == 'refs/heads/main'
         run: terraform apply -auto-approve -input=false
