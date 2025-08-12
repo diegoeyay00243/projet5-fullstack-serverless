@@ -1,0 +1,56 @@
+name: Terraform Destroy (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Tape YES pour confirmer la destruction de l'infra"
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: us-east-1
+      # Variables TF (mêmes que le deploy, pour satisfaire les modules)
+      TF_VAR_lambda_zip_path: ${{ vars.LAMBDA_ZIP_PATH || secrets.LAMBDA_ZIP_PATH }}
+      TF_VAR_email_sender:   ${{ secrets.EMAIL_SENDER }}
+      TF_VAR_email_password: ${{ secrets.EMAIL_PASSWORD }}
+      TF_VAR_email_receiver: ${{ secrets.EMAIL_RECEIVER }}
+
+    steps:
+      - name: Vérif confirmation
+        if: inputs.confirm != 'YES'
+        run: |
+          echo "Refusé : il faut confirmer avec YES."
+          exit 1
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      # Important : vider le bucket de logs CF (pas force_destroy)
+      - name: Purge S3 logs bucket (best-effort)
+        run: |
+          aws s3 rm s3://mon-site-logs-bucket --recursive || true
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform destroy
+        run: terraform destroy -auto-approve -input=false
