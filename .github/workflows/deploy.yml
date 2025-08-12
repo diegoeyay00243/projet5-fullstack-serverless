@@ -5,7 +5,7 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 permissions:
   id-token: write
@@ -14,8 +14,17 @@ permissions:
 jobs:
   terraform:
     runs-on: ubuntu-latest
+
+    # Variables d'environnement globales au job
     env:
       AWS_REGION: us-east-1
+
+      # === Étape 2 : passage des variables Terraform via TF_VAR_* ===
+      # LAMBDA_ZIP_PATH peut venir d'une variable OU d'un secret.
+      TF_VAR_lambda_zip_path: ${{ vars.LAMBDA_ZIP_PATH || secrets.LAMBDA_ZIP_PATH }}
+      TF_VAR_email_sender:   ${{ secrets.EMAIL_SENDER }}
+      TF_VAR_email_password: ${{ secrets.EMAIL_PASSWORD }}
+      TF_VAR_email_receiver: ${{ secrets.EMAIL_RECEIVER }}
 
     steps:
       - name: Checkout
@@ -26,6 +35,7 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
 
       - name: Who am I?
         run: aws sts get-caller-identity
